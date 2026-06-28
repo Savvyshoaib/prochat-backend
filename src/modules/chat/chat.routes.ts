@@ -194,7 +194,10 @@ export async function chatRoutes(app: FastifyInstance) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error(`[${env.AI_PROVIDER}] stream error:`, msg);
-      res.write(`data: ${JSON.stringify({ error: `${env.AI_PROVIDER} error: ${msg}` })}\n\n`);
+      // Return a friendly message instead of raw API error
+      const friendlyMsg = "I'm having trouble responding right now. Please try again in a moment.";
+      fullReply = friendlyMsg;
+      res.write(`data: ${JSON.stringify({ text: friendlyMsg })}\n\n`);
     } finally {
       if (fullReply) {
         await db.insert(messages).values({
