@@ -93,7 +93,13 @@ export async function* streamAI(
 // ── System prompt builder ─────────────────────────────────────────────────────
 type BotRow = typeof bots.$inferSelect;
 
-function buildSystemPrompt(bot: BotRow): string {
+/** Parse [SECTION]...[/SECTION] markers from instructions text */
+function parseSection(text: string, tag: string): string {
+  const m = text.match(new RegExp(`\\[${tag}\\]([\\s\\S]*?)\\[\\/${tag}\\]`, "i"));
+  return m ? m[1].trim() : "";
+}
+
+export function buildSystemPrompt(bot: BotRow): string {
   const parts: string[] = [];
 
   if (bot.persona) {
@@ -104,25 +110,41 @@ function buildSystemPrompt(bot: BotRow): string {
 
   parts.push(`Always communicate in a ${bot.tone.toLowerCase()} tone.`);
 
-  // Default formatting rule (user can override via instructions/guardrails/rules)
-  parts.push(`Always format your responses using proper Markdown:
-- If the user explicitly asks for a table, use a proper Markdown table (with | and --- header separators)
-- Otherwise use ## or ### for section headings, and - or * for bullet lists
-- Use **bold** only for key terms
-- Add a blank line between sections
-- Never write everything as one long unbroken paragraph
-- Always honor the user's requested format (table, list, paragraph, etc.) — user request overrides default`);
+  // Parse structured instruction sections
+  const raw = bot.instructions ?? "";
+  const behavior   = parseSection(raw, "BEHAVIOR");
+  const guardrails = parseSection(raw, "GUARDRAILS");
+  const rules      = parseSection(raw, "RULES");
+  // Fallback: if no markers, treat entire instructions as behavior
+  const plainFallback = !behavior && !guardrails && !rules ? raw.trim() : "";
 
-  if (bot.instructions) parts.push(bot.instructions);
+  if (behavior || plainFallback) {
+    parts.push(`## Behavior\n${behavior || plainFallback}`);
+  }
+
+  if (guardrails) {
+    parts.push(`## Guardrails (STRICTLY FOLLOW — highest priority)\n${guardrails}`);
+  }
+
+  if (rules) {
+    parts.push(`## Rules (STRICTLY FOLLOW — must apply to every response)\n${rules}`);
+  }
+
+  // Formatting
+  parts.push(`## Formatting
+- If the user asks for a table, use a proper Markdown table
+- Otherwise use headings and bullet points for clarity
+- Never write everything as one long unbroken paragraph
+- Always honor the user's requested format`);
 
   if (bot.knowledgeText?.trim()) {
     parts.push(
-      `\n## Knowledge Base\nAnswer using ONLY the following information. ` +
+      `## Knowledge Base\nAnswer using ONLY the following information. ` +
         `If the answer is not here, say "I don't have that information" — never fabricate.\n\n${bot.knowledgeText}`
     );
   }
 
-  parts.push(`\nLanguage rule: Always mirror the exact language and script the user writes in. If the user writes in Roman Urdu (Urdu words spelled in English letters, e.g. "apka name kia hai"), reply in Roman Urdu. If they write in English, reply in English. If they write in Urdu script, reply in Urdu script. Never switch scripts — match the user exactly. Default language if unclear: ${bot.language}.`);
+  parts.push(`## Language Rule\nAlways mirror the exact language and script the user writes in. If the user writes in Roman Urdu, reply in Roman Urdu. If English, reply in English. If Urdu script, reply in Urdu script. Never switch — match the user exactly. Default: ${bot.language}.`);
   return parts.join("\n\n");
 }
 

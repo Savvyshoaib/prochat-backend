@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { bots } from "@/db/schema";
 import { conversations, messages } from "@/db/schema/conversations";
 import { fail } from "@/utils/response";
-import { streamAI } from "@/modules/chat/chat.routes";
+import { streamAI, buildSystemPrompt } from "@/modules/chat/chat.routes";
 import { env } from "@/config/env";
 
 // The embeddable widget script — all logic here, snippet is just 2 lines on the user's site.
@@ -137,18 +137,7 @@ export async function widgetRoutes(app: FastifyInstance) {
 
     let fullReply = "";
 
-    // Build system prompt
-    const parts: string[] = [];
-    if (bot.persona) parts.push(`You are ${bot.persona}.`);
-    else parts.push(`You are ${bot.name || "a helpful AI assistant"}.`);
-    parts.push(`Always communicate in a ${bot.tone.toLowerCase()} tone.`);
-    parts.push(`Always format your responses using proper Markdown:\n- If the user explicitly asks for a table, use a proper Markdown table (with | and --- header separators)\n- Otherwise use ## or ### for headings and - or * for bullet lists\n- Use **bold** only for key terms\n- Add a blank line between sections\n- Never write everything as one long unbroken paragraph\n- Always honor the user's requested format (table, list, paragraph, etc.) — user request overrides default`);
-    if (bot.instructions) parts.push(bot.instructions);
-    if (bot.knowledgeText?.trim()) {
-      parts.push(`\n## Knowledge Base\nAnswer using ONLY the following information. If the answer is not here, say "I don't have that information" — never fabricate.\n\n${bot.knowledgeText}`);
-    }
-    parts.push(`\nLanguage rule: Always mirror the exact language and script the user writes in. If the user writes in Roman Urdu (Urdu words spelled in English letters, e.g. "apka name kia hai"), reply in Roman Urdu. If they write in English, reply in English. If they write in Urdu script, reply in Urdu script. Never switch scripts — match the user exactly. Default language if unclear: ${bot.language}.`);
-    const systemPrompt = parts.join("\n\n");
+    const systemPrompt = buildSystemPrompt(bot);
 
     // Batch tokens — flush every 20ms
     let buffer = "";
