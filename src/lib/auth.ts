@@ -50,7 +50,8 @@ export const auth = betterAuth({
     cookies: {
       session_token: {
         attributes: {
-          sameSite: "lax",
+          // cross-origin (Vercel ↔ Render) requires SameSite=none + Secure
+          sameSite: env.NODE_ENV === "production" ? "none" : "lax",
           secure: env.NODE_ENV === "production",
           httpOnly: true,
           path: "/",
