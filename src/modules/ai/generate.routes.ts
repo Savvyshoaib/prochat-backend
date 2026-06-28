@@ -4,6 +4,9 @@ import { authenticate } from "@/middleware/authenticate";
 import { env } from "@/config/env";
 import { fail } from "@/utils/response";
 
+// Free OpenRouter model — no billing, lifetime free tier
+const FREE_MODEL = "meta-llama/llama-3.1-8b-instruct:free";
+
 const generateSchema = z.object({
   field: z.enum(["behavior", "guardrails", "rules"]),
   botName: z.string().default(""),
@@ -13,44 +16,38 @@ const generateSchema = z.object({
 });
 
 const PROMPTS: Record<string, (ctx: { botName: string; description: string; tone: string; persona: string }) => string> = {
-  behavior: (ctx) => `
-You are helping set up an AI chatbot. Write a concise Behavior description (max 5-6 lines) for a chatbot with the following details:
+  behavior: (ctx) => `You are helping set up an AI chatbot. Write a concise Behavior description (max 5-6 lines) for a chatbot with these details:
 - Bot name: ${ctx.botName || "AI Assistant"}
 - Description: ${ctx.description || "A helpful assistant"}
 - Tone: ${ctx.tone || "professional"}
 - Persona: ${ctx.persona || "helpful assistant"}
 
-The behavior should describe who the bot is, its role, and how it should interact with users.
-Output ONLY the behavior text, no headings, no explanations, no markdown. Plain text, 5-6 lines max.
-`.trim(),
+The behavior should describe who the bot is, its role, and how it interacts with users.
+Output ONLY the behavior text. No headings, no explanations, no markdown. Plain text, 5-6 lines max.`,
 
-  guardrails: (ctx) => `
-You are helping set up an AI chatbot. Write concise Guardrails (max 5-6 lines) for a chatbot with the following details:
+  guardrails: (ctx) => `You are helping set up an AI chatbot. Write concise Guardrails (max 5-6 lines) for a chatbot with these details:
 - Bot name: ${ctx.botName || "AI Assistant"}
 - Description: ${ctx.description || "A helpful assistant"}
 - Tone: ${ctx.tone || "professional"}
 - Persona: ${ctx.persona || "helpful assistant"}
 
 Guardrails are topics, actions, or behaviors the bot should avoid or restrict.
-Output ONLY the guardrails text, no headings, no explanations, no markdown. Plain text, 5-6 lines max.
-`.trim(),
+Output ONLY the guardrails text. No headings, no explanations, no markdown. Plain text, 5-6 lines max.`,
 
-  rules: (ctx) => `
-You are helping set up an AI chatbot. Write concise Rules (max 5-6 lines) for a chatbot with the following details:
+  rules: (ctx) => `You are helping set up an AI chatbot. Write concise Rules (max 5-6 lines) for a chatbot with these details:
 - Bot name: ${ctx.botName || "AI Assistant"}
 - Description: ${ctx.description || "A helpful assistant"}
 - Tone: ${ctx.tone || "professional"}
 - Persona: ${ctx.persona || "helpful assistant"}
 
 Rules are specific instructions the bot must always follow in every response.
-Output ONLY the rules text, no headings, no explanations, no markdown. Plain text, 5-6 lines max.
-`.trim(),
+Output ONLY the rules text. No headings, no explanations, no markdown. Plain text, 5-6 lines max.`,
 };
 
 export async function generateRoutes(app: FastifyInstance) {
   app.post("/api/ai/generate", { preHandler: authenticate }, async (request, reply) => {
-    if (!env.GEMINI_API_KEY) {
-      return reply.status(503).send(fail("Gemini API key not configured"));
+    if (!env.OPENROUTER_API_KEY) {
+      return reply.status(503).send(fail("OpenRouter API key not configured"));
     }
 
     const parsed = generateSchema.safeParse(request.body);
@@ -61,28 +58,33 @@ export async function generateRoutes(app: FastifyInstance) {
     const { field, botName, description, tone, persona } = parsed.data;
     const prompt = PROMPTS[field]({ botName, description, tone, persona });
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`;
-
-    const res = await fetch(url, {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": env.FRONTEND_URL,
+        "X-Title": "HelixAI",
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 300, temperature: 0.7 },
+        model: FREE_MODEL,
+        max_tokens: 300,
+        temperature: 0.7,
+        messages: [{ role: "user", content: prompt }],
       }),
     });
 
     if (!res.ok) {
       const err = await res.text();
-      console.error("[Gemini] error:", err);
-      return reply.status(502).send(fail("Failed to generate content"));
+      console.error("[Generate] OpenRouter error", res.status, err);
+      return reply.status(502).send(fail("Failed to generate content. Please try again."));
     }
 
     const data = await res.json() as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[]
+      choices?: { message?: { content?: string } }[]
     };
 
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+    const text = data.choices?.[0]?.message?.content?.trim() ?? "";
     return reply.send({ success: true, text });
   });
 }
