@@ -15,6 +15,7 @@ import { chatRoutes } from "@/modules/chat/chat.routes";
 import { knowledgeRoutes } from "@/modules/knowledge/knowledge.routes";
 import { analyticsRoutes } from "@/modules/analytics/analytics.routes";
 import { widgetRoutes } from "@/modules/widget/widget.routes";
+import { generateRoutes } from "@/modules/ai/generate.routes";
 
 async function buildApp() {
   const app = Fastify({ logger: loggerConfig });
@@ -49,6 +50,7 @@ async function buildApp() {
   await app.register(knowledgeRoutes);
   await app.register(analyticsRoutes);
   await app.register(widgetRoutes);
+  await app.register(generateRoutes);
 
   return app;
 }

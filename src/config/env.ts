@@ -27,6 +27,10 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
 
+  // ── Gemini (for AI content generation — free tier) ────────────────────────
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default("gemini-1.5-flash"),
+
   // ── Email (optional) ──────────────────────────────────────────────────────
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().optional(),
@@ -60,4 +64,4 @@ if (!providerKeyMap[env.AI_PROVIDER]) {
   process.exit(1);
 }
 
-console.log(`✅  AI Provider: ${env.AI_PROVIDER} | Model: ${env.AI_MODEL ?? "default"}`);
+console.log(`✅  AI Provider: ${env.AI_PROVIDER} | Model: ${env.AI_MODEL ?? "default"} | Gemini: ${env.GEMINI_MODEL}`);
