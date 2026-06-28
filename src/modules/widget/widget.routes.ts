@@ -158,7 +158,7 @@ export async function widgetRoutes(app: FastifyInstance) {
         `If the answer is not here, say "I don't have that information" — never fabricate.\n\n${bot.knowledgeText}`
       );
     }
-    parts.push(`\nAlways respond in ${bot.language}.`);
+    parts.push(`\nLanguage rule: Always mirror the exact language and script the user writes in. If the user writes in Roman Urdu (Urdu words spelled in English letters, e.g. "apka name kia hai"), reply in Roman Urdu. If they write in English, reply in English. If they write in Urdu script, reply in Urdu script. Never switch scripts — match the user exactly. Default language if unclear: ${bot.language}.`);
     const systemPrompt = parts.join("\n\n");
 
     try {
