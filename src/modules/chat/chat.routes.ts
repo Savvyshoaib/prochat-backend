@@ -102,49 +102,59 @@ function parseSection(text: string, tag: string): string {
 export function buildSystemPrompt(bot: BotRow): string {
   const parts: string[] = [];
 
+  // Parse structured instruction sections first
+  const raw = bot.instructions ?? "";
+  const behavior   = parseSection(raw, "BEHAVIOR");
+  const guardrails = parseSection(raw, "GUARDRAILS");
+  const rules      = parseSection(raw, "RULES");
+  const plainFallback = !behavior && !guardrails && !rules ? raw.trim() : "";
+
+  // ── PRIORITY 1: Guardrails & Rules (placed first so model weighs them highest) ──
+  if (guardrails) {
+    parts.push(`# GUARDRAILS — YOU MUST FOLLOW THESE WITHOUT EXCEPTION\n${guardrails}`);
+  }
+
+  if (rules) {
+    parts.push(`# RULES — APPLY THESE IN EVERY SINGLE RESPONSE\n${rules}`);
+  }
+
+  // ── PRIORITY 2: Identity & Tone ──
   if (bot.persona) {
     parts.push(`You are ${bot.persona}.`);
   } else {
     parts.push(`You are ${bot.name || "a helpful AI assistant"}.`);
   }
 
-  parts.push(`Always communicate in a ${bot.tone.toLowerCase()} tone.`);
+  parts.push(`Tone: ${bot.tone.toLowerCase()}. Sound like a real, warm human — not a robot or AI assistant. Never start a response by stating your name repeatedly. Vary how you open each reply.`);
 
-  // Parse structured instruction sections
-  const raw = bot.instructions ?? "";
-  const behavior   = parseSection(raw, "BEHAVIOR");
-  const guardrails = parseSection(raw, "GUARDRAILS");
-  const rules      = parseSection(raw, "RULES");
-  // Fallback: if no markers, treat entire instructions as behavior
-  const plainFallback = !behavior && !guardrails && !rules ? raw.trim() : "";
-
+  // ── PRIORITY 3: Behavior ──
   if (behavior || plainFallback) {
-    parts.push(`## Behavior\n${behavior || plainFallback}`);
+    parts.push(`## How you should behave\n${behavior || plainFallback}`);
   }
 
-  if (guardrails) {
-    parts.push(`## Guardrails (STRICTLY FOLLOW — highest priority)\n${guardrails}`);
-  }
+  // ── PRIORITY 4: Lead capture (always active) ──
+  parts.push(`## Lead Capture — IMPORTANT
+When a user shows clear interest in a service or wants to move forward (e.g. "I want this", "how do we start", "what's the budget", "let's proceed"), naturally guide the conversation to collect their contact details.
+Ask for: name, email, and phone number — one at a time, conversationally. Do NOT present a form or a list. Just ask naturally like a human would.
+Example: "That sounds great! To get things started, could I get your name?" — then after they reply — "Perfect! And what's the best email to reach you on?"
+Once you have their details, confirm you'll be in touch and thank them warmly.
+Never skip this step when a user is ready to engage.`);
 
-  if (rules) {
-    parts.push(`## Rules (STRICTLY FOLLOW — must apply to every response)\n${rules}`);
-  }
-
-  // Formatting
-  parts.push(`## Formatting
+  // ── PRIORITY 5: Formatting ──
+  parts.push(`## Response Format
 - If the user asks for a table, use a proper Markdown table
-- Otherwise use headings and bullet points for clarity
-- Never write everything as one long unbroken paragraph
+- Otherwise use short paragraphs or bullet points — never a wall of text
+- Keep responses concise and conversational unless detail is needed
 - Always honor the user's requested format`);
 
+  // ── PRIORITY 6: Knowledge Base ──
   if (bot.knowledgeText?.trim()) {
-    parts.push(
-      `## Knowledge Base\nAnswer using ONLY the following information. ` +
-        `If the answer is not here, say "I don't have that information" — never fabricate.\n\n${bot.knowledgeText}`
-    );
+    parts.push(`## Knowledge Base\nUse the following information to answer questions. If something isn't covered here, say you'll find out and follow up — never make things up.\n\n${bot.knowledgeText}`);
   }
 
-  parts.push(`## Language Rule\nAlways mirror the exact language and script the user writes in. If the user writes in Roman Urdu, reply in Roman Urdu. If English, reply in English. If Urdu script, reply in Urdu script. Never switch — match the user exactly. Default: ${bot.language}.`);
+  // ── PRIORITY 7: Language ──
+  parts.push(`## Language\nAlways reply in the same language and script the user uses. Roman Urdu → Roman Urdu. English → English. Urdu script → Urdu script. Never switch. Default: ${bot.language}.`);
+
   return parts.join("\n\n");
 }
 
