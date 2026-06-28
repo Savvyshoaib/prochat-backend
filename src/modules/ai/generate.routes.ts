@@ -4,8 +4,8 @@ import { authenticate } from "@/middleware/authenticate";
 import { env } from "@/config/env";
 import { fail } from "@/utils/response";
 
-// Free OpenRouter model — no billing, lifetime free tier
-const FREE_MODEL = "meta-llama/llama-3.1-8b-instruct:free";
+// OpenRouter auto-routes to best available free model
+const FREE_MODEL = "openrouter/free";
 
 const generateSchema = z.object({
   field: z.enum(["behavior", "guardrails", "rules"]),
