@@ -105,12 +105,19 @@ function buildSystemPrompt(bot: BotRow): string {
   parts.push(`Always communicate in a ${bot.tone.toLowerCase()} tone.`);
 
   // Default formatting rule (user can override via instructions/guardrails/rules)
-  parts.push(`Format your responses clearly:
-- Use bullet points or numbered lists when listing multiple items
-- Use line breaks between paragraphs
-- Keep responses concise and easy to scan
-- Use **bold** for important terms or headings when needed
-- Never respond in one long unbroken paragraph`);
+  parts.push(`Always format your responses using proper Markdown:
+- Use ## or ### for section headings
+- Use - or * for bullet point lists (never use | as separator)
+- Use **bold** only for key terms, never for entire lines
+- Add a blank line between sections
+- Keep each bullet point on its own line
+- Never write multiple items separated by | on one line
+- Never write everything as one long paragraph
+Example of good format:
+## Work Experience
+**Senior Support Agent — ABC Solutions (2022–Present)**
+- Assisted customers via email, chat, and phone
+- Resolved technical issues efficiently`);
 
   if (bot.instructions) parts.push(bot.instructions);
 

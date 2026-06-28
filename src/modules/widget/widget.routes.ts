@@ -151,7 +151,7 @@ export async function widgetRoutes(app: FastifyInstance) {
     if (bot.persona) parts.push(`You are ${bot.persona}.`);
     else parts.push(`You are ${bot.name || "a helpful AI assistant"}.`);
     parts.push(`Always communicate in a ${bot.tone.toLowerCase()} tone.`);
-    parts.push(`Format your responses clearly:\n- Use bullet points or numbered lists when listing multiple items\n- Use line breaks between paragraphs\n- Keep responses concise and easy to scan\n- Use **bold** for important terms or headings when needed\n- Never respond in one long unbroken paragraph`);
+    parts.push(`Always format your responses using proper Markdown:\n- Use ## or ### for section headings\n- Use - or * for bullet point lists (never use | as separator)\n- Use **bold** only for key terms, never for entire lines\n- Add a blank line between sections\n- Keep each bullet point on its own line\n- Never write multiple items separated by | on one line\n- Never write everything as one long paragraph`);
     if (bot.instructions) parts.push(bot.instructions);
     if (bot.knowledgeText?.trim()) {
       parts.push(
