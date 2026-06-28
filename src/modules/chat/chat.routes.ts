@@ -104,6 +104,14 @@ function buildSystemPrompt(bot: BotRow): string {
 
   parts.push(`Always communicate in a ${bot.tone.toLowerCase()} tone.`);
 
+  // Default formatting rule (user can override via instructions/guardrails/rules)
+  parts.push(`Format your responses clearly:
+- Use bullet points or numbered lists when listing multiple items
+- Use line breaks between paragraphs
+- Keep responses concise and easy to scan
+- Use **bold** for important terms or headings when needed
+- Never respond in one long unbroken paragraph`);
+
   if (bot.instructions) parts.push(bot.instructions);
 
   if (bot.knowledgeText?.trim()) {
