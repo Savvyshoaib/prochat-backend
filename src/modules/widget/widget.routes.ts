@@ -32,7 +32,10 @@ function buildWidgetScript(): string {
     if(b.brandColor)btn.style.background=b.brandColor;
     var iconUrl=b.bubbleIconUrl||b.logoUrl;
     if(iconUrl){
-      btn.innerHTML='<img src="'+iconUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />';
+      btn.style.background="transparent";
+      btn.style.boxShadow="none";
+      btn.style.padding="0";
+      btn.innerHTML='<img src="'+iconUrl+'" style="width:56px;height:56px;object-fit:cover;border-radius:50%;display:block;" />';
     }
   }).catch(function(){});
   document.body.appendChild(btn);
