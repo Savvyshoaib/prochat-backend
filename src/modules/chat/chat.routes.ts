@@ -154,34 +154,34 @@ export async function chatRoutes(app: FastifyInstance) {
     const { botId, message, conversationId } = parsed.data;
     const userId = request.user.id;
 
-    const [bot] = await db.select().from(bots).where(eq(bots.id, botId)).limit(1);
+    // ── 1. Fetch bot + existing history in parallel ───────────────────────────
+    const [botResult, existingHistory] = await Promise.all([
+      db.select().from(bots).where(eq(bots.id, botId)).limit(1),
+      conversationId
+        ? db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.createdAt)).limit(20)
+        : Promise.resolve([]),
+    ]);
+
+    const [bot] = botResult;
     if (!bot) return reply.status(404).send(fail("Bot not found"));
     if (bot.userId !== userId) return reply.status(403).send(fail("Forbidden"));
 
+    // ── 2. Prepare conversation — fire-and-forget DB writes ──────────────────
     let convId: string | null = conversationId ?? null;
     if (!convId) {
       convId = `conv_${newId()}`;
-      await db.insert(conversations).values({
-        id: convId, botId, userId,
-        title: message.slice(0, 60),
-      });
     }
+    const convId_final = convId;
 
-    const history = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, convId))
-      .orderBy(asc(messages.createdAt))
-      .limit(20);
+    // Insert conversation + user message in background (don't await)
+    const dbWritePromise = (async () => {
+      if (!conversationId) {
+        await db.insert(conversations).values({ id: convId_final, botId, userId, title: message.slice(0, 60) });
+      }
+      await db.insert(messages).values({ id: `msg_${newId()}`, conversationId: convId_final, role: "user", content: message });
+    })();
 
-    await db.insert(messages).values({
-      id: `msg_${newId()}`,
-      conversationId: convId,
-      role: "user",
-      content: message,
-    });
-
-    // SSE setup
+    // ── 3. Start streaming immediately ───────────────────────────────────────
     const res = reply.raw;
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -195,37 +195,57 @@ export async function chatRoutes(app: FastifyInstance) {
 
     let fullReply = "";
 
+    // Batch tokens — flush every 20ms instead of per-token to reduce write overhead
+    let buffer = "";
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flush = () => {
+      if (buffer) {
+        res.write(`data: ${JSON.stringify({ text: buffer })}\n\n`);
+        fullReply += buffer;
+        buffer = "";
+      }
+      flushTimer = null;
+    };
+    const scheduleFlush = () => {
+      if (!flushTimer) flushTimer = setTimeout(flush, 20);
+    };
+
     try {
       const gen = streamAI(
         buildSystemPrompt(bot),
-        history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        existingHistory.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         message
       );
 
       for await (const chunk of gen) {
-        fullReply += chunk;
-        res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+        buffer += chunk;
+        scheduleFlush();
       }
+      // Flush remaining
+      if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+      flush();
     } catch (err: unknown) {
+      if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error(`[${env.AI_PROVIDER}] stream error:`, msg);
-      // Return a friendly message instead of raw API error
       const friendlyMsg = "I'm having trouble responding right now. Please try again in a moment.";
       fullReply = friendlyMsg;
       res.write(`data: ${JSON.stringify({ text: friendlyMsg })}\n\n`);
     } finally {
+      // Wait for DB writes before saving assistant reply
+      await dbWritePromise.catch(() => {});
       if (fullReply) {
         await db.insert(messages).values({
           id: `msg_${newId()}`,
-          conversationId: convId,
+          conversationId: convId_final,
           role: "assistant",
           content: fullReply,
         });
         await db.update(conversations)
           .set({ updatedAt: new Date() })
-          .where(eq(conversations.id, convId!));
+          .where(eq(conversations.id, convId_final));
       }
-      res.write(`data: ${JSON.stringify({ done: true, conversationId: convId })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, conversationId: convId_final })}\n\n`);
       res.end();
     }
   });

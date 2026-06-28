@@ -102,37 +102,28 @@ export async function widgetRoutes(app: FastifyInstance) {
 
     const { botId, message, conversationId, sessionId } = parsed.data;
 
-    const [bot] = await db.select().from(bots).where(eq(bots.id, botId)).limit(1);
+    // ── 1. Fetch bot + history in parallel ───────────────────────────────────
+    const [botResult, existingHistory] = await Promise.all([
+      db.select().from(bots).where(eq(bots.id, botId)).limit(1),
+      conversationId
+        ? db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.createdAt)).limit(20)
+        : Promise.resolve([]),
+    ]);
+
+    const [bot] = botResult;
     if (!bot) return reply.status(404).send(fail("Bot not found"));
     if (bot.status !== "Live") return reply.status(403).send(fail("Bot is not live"));
 
-    let convId: string | null = conversationId ?? null;
-    if (!convId) {
-      convId = `conv_${newId()}`;
-      await db.insert(conversations).values({
-        id: convId,
-        botId,
-        userId: null, // anonymous
-        sessionId: sessionId ?? null,
-        title: message.slice(0, 60),
-      });
-    }
+    // ── 2. Prepare conv ID + fire-and-forget DB writes ───────────────────────
+    const convId_final = conversationId ?? `conv_${newId()}`;
+    const dbWritePromise = (async () => {
+      if (!conversationId) {
+        await db.insert(conversations).values({ id: convId_final, botId, userId: null, sessionId: sessionId ?? null, title: message.slice(0, 60) });
+      }
+      await db.insert(messages).values({ id: `msg_${newId()}`, conversationId: convId_final, role: "user", content: message });
+    })();
 
-    const history = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, convId))
-      .orderBy(asc(messages.createdAt))
-      .limit(20);
-
-    await db.insert(messages).values({
-      id: `msg_${newId()}`,
-      conversationId: convId,
-      role: "user",
-      content: message,
-    });
-
-    // SSE — same pattern as authenticated chat
+    // ── 3. Start streaming immediately ───────────────────────────────────────
     const res = reply.raw;
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -146,7 +137,7 @@ export async function widgetRoutes(app: FastifyInstance) {
 
     let fullReply = "";
 
-    // Build system prompt inline (same logic as chat.routes)
+    // Build system prompt
     const parts: string[] = [];
     if (bot.persona) parts.push(`You are ${bot.persona}.`);
     else parts.push(`You are ${bot.name || "a helpful AI assistant"}.`);
@@ -154,42 +145,47 @@ export async function widgetRoutes(app: FastifyInstance) {
     parts.push(`Always format your responses using proper Markdown:\n- Use ## or ### for section headings\n- Use - or * for bullet point lists (never use | as separator)\n- Use **bold** only for key terms, never for entire lines\n- Add a blank line between sections\n- Keep each bullet point on its own line\n- Never write multiple items separated by | on one line\n- Never write everything as one long paragraph`);
     if (bot.instructions) parts.push(bot.instructions);
     if (bot.knowledgeText?.trim()) {
-      parts.push(
-        `\n## Knowledge Base\nAnswer using ONLY the following information. ` +
-        `If the answer is not here, say "I don't have that information" — never fabricate.\n\n${bot.knowledgeText}`
-      );
+      parts.push(`\n## Knowledge Base\nAnswer using ONLY the following information. If the answer is not here, say "I don't have that information" — never fabricate.\n\n${bot.knowledgeText}`);
     }
     parts.push(`\nLanguage rule: Always mirror the exact language and script the user writes in. If the user writes in Roman Urdu (Urdu words spelled in English letters, e.g. "apka name kia hai"), reply in Roman Urdu. If they write in English, reply in English. If they write in Urdu script, reply in Urdu script. Never switch scripts — match the user exactly. Default language if unclear: ${bot.language}.`);
     const systemPrompt = parts.join("\n\n");
 
-    try {
-      const gen = streamAI(
-        systemPrompt,
-        history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-        message
-      );
+    // Batch tokens — flush every 20ms
+    let buffer = "";
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flush = () => {
+      if (buffer) { res.write(`data: ${JSON.stringify({ text: buffer })}\n\n`); fullReply += buffer; buffer = ""; }
+      flushTimer = null;
+    };
+    const scheduleFlush = () => { if (!flushTimer) flushTimer = setTimeout(flush, 20); };
 
-      for await (const chunk of gen) {
-        fullReply += chunk;
-        res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
-      }
+    try {
+      const gen = streamAI(systemPrompt, existingHistory.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })), message);
+      for await (const chunk of gen) { buffer += chunk; scheduleFlush(); }
+      if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+      flush();
     } catch (err: unknown) {
+      if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
       const msg = err instanceof Error ? err.message : "Unknown error";
-      res.write(`data: ${JSON.stringify({ error: `AI error: ${msg}` })}\n\n`);
+      console.error("[widget] stream error:", msg);
+      const friendlyMsg = "I'm having trouble responding right now. Please try again in a moment.";
+      fullReply = friendlyMsg;
+      res.write(`data: ${JSON.stringify({ text: friendlyMsg })}\n\n`);
     } finally {
+      await dbWritePromise.catch(() => {});
       if (fullReply) {
         await db.insert(messages).values({
           id: `msg_${newId()}`,
-          conversationId: convId,
+          conversationId: convId_final,
           role: "assistant",
           content: fullReply,
         });
         await db
           .update(conversations)
           .set({ updatedAt: new Date() })
-          .where(eq(conversations.id, convId!));
+          .where(eq(conversations.id, convId_final));
       }
-      res.write(`data: ${JSON.stringify({ done: true, conversationId: convId })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, conversationId: convId_final })}\n\n`);
       res.end();
     }
   });
