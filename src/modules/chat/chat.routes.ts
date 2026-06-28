@@ -106,18 +106,12 @@ function buildSystemPrompt(bot: BotRow): string {
 
   // Default formatting rule (user can override via instructions/guardrails/rules)
   parts.push(`Always format your responses using proper Markdown:
-- Use ## or ### for section headings
-- Use - or * for bullet point lists (never use | as separator)
-- Use **bold** only for key terms, never for entire lines
+- If the user explicitly asks for a table, use a proper Markdown table (with | and --- header separators)
+- Otherwise use ## or ### for section headings, and - or * for bullet lists
+- Use **bold** only for key terms
 - Add a blank line between sections
-- Keep each bullet point on its own line
-- Never write multiple items separated by | on one line
-- Never write everything as one long paragraph
-Example of good format:
-## Work Experience
-**Senior Support Agent — ABC Solutions (2022–Present)**
-- Assisted customers via email, chat, and phone
-- Resolved technical issues efficiently`);
+- Never write everything as one long unbroken paragraph
+- Always honor the user's requested format (table, list, paragraph, etc.) — user request overrides default`);
 
   if (bot.instructions) parts.push(bot.instructions);
 

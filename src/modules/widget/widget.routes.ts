@@ -142,7 +142,7 @@ export async function widgetRoutes(app: FastifyInstance) {
     if (bot.persona) parts.push(`You are ${bot.persona}.`);
     else parts.push(`You are ${bot.name || "a helpful AI assistant"}.`);
     parts.push(`Always communicate in a ${bot.tone.toLowerCase()} tone.`);
-    parts.push(`Always format your responses using proper Markdown:\n- Use ## or ### for section headings\n- Use - or * for bullet point lists (never use | as separator)\n- Use **bold** only for key terms, never for entire lines\n- Add a blank line between sections\n- Keep each bullet point on its own line\n- Never write multiple items separated by | on one line\n- Never write everything as one long paragraph`);
+    parts.push(`Always format your responses using proper Markdown:\n- If the user explicitly asks for a table, use a proper Markdown table (with | and --- header separators)\n- Otherwise use ## or ### for headings and - or * for bullet lists\n- Use **bold** only for key terms\n- Add a blank line between sections\n- Never write everything as one long unbroken paragraph\n- Always honor the user's requested format (table, list, paragraph, etc.) — user request overrides default`);
     if (bot.instructions) parts.push(bot.instructions);
     if (bot.knowledgeText?.trim()) {
       parts.push(`\n## Knowledge Base\nAnswer using ONLY the following information. If the answer is not here, say "I don't have that information" — never fabricate.\n\n${bot.knowledgeText}`);
