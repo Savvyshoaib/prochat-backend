@@ -28,7 +28,13 @@ function buildWidgetScript(): string {
   btn.title="Chat with us";
   btn.style.cssText="position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 4px 20px rgba(0,0,0,0.25);z-index:2147483647;background:#4f46e5;transition:transform .2s;";
   btn.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-  fetch(apiBase+"/api/widget/"+botId).then(function(r){return r.json();}).then(function(b){if(b.brandColor)btn.style.background=b.brandColor;}).catch(function(){});
+  fetch(apiBase+"/api/widget/"+botId).then(function(r){return r.json();}).then(function(b){
+    if(b.brandColor)btn.style.background=b.brandColor;
+    var iconUrl=b.bubbleIconUrl||b.logoUrl;
+    if(iconUrl){
+      btn.innerHTML='<img src="'+iconUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />';
+    }
+  }).catch(function(){});
   document.body.appendChild(btn);
   var open=false;
   function setOpen(val){open=val;fr.style.display=open?"block":"none";btn.style.transform=open?"rotate(90deg)":"";}
