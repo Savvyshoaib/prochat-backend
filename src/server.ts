@@ -16,6 +16,9 @@ import { knowledgeRoutes } from "@/modules/knowledge/knowledge.routes";
 import { analyticsRoutes } from "@/modules/analytics/analytics.routes";
 import { widgetRoutes } from "@/modules/widget/widget.routes";
 import { generateRoutes } from "@/modules/ai/generate.routes";
+import { voiceRoutes } from "@/modules/voice/voice.routes";
+import { whatsappRoutes } from "@/modules/whatsapp/whatsapp.routes";
+import { restoreAllSessions } from "@/modules/whatsapp/session-manager";
 
 async function buildApp() {
   const app = Fastify({ logger: loggerConfig });
@@ -51,6 +54,8 @@ async function buildApp() {
   await app.register(analyticsRoutes);
   await app.register(widgetRoutes);
   await app.register(generateRoutes);
+  await app.register(voiceRoutes);
+  await app.register(whatsappRoutes);
 
   return app;
 }
@@ -61,6 +66,10 @@ async function start() {
     await app.listen({ port: env.PORT, host: "0.0.0.0" });
     console.log(`Backend running on http://localhost:${env.PORT}`);
     console.log(`Health: http://localhost:${env.PORT}/health`);
+    // Restore persisted WhatsApp sessions in background
+    restoreAllSessions().catch((err) =>
+      console.error("[WA] restoreAllSessions error:", err)
+    );
   } catch (err) {
     console.error("Failed to start server:", err);
     process.exit(1);

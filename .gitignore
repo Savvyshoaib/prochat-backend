@@ -34,3 +34,6 @@ dist-ssr
 .env
 .env.example
 .npmrc
+
+# WhatsApp Baileys session auth files
+wa-sessions/

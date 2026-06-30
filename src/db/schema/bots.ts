@@ -42,6 +42,9 @@ export const bots = pgTable("bot", {
   crawlDepth: text("crawl_depth")
     .notNull()
     .default("3 levels (recommended)"),
+  // WhatsApp integration
+  waPhoneNumberId: text("wa_phone_number_id").notNull().default(""),
+  waAccessToken: text("wa_access_token").notNull().default(""),
   status: botStatusEnum("status").notNull().default("Draft"),
   step: integer("step").notNull().default(1),
   deployments: jsonb("deployments")

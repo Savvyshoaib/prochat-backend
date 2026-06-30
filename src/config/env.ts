@@ -33,6 +33,19 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),
+
+  // ── Voice calling ─────────────────────────────────────────────────────────
+  DAILY_API_KEY: z.string().optional(),
+  ELEVENLABS_API_KEY: z.string().optional(),
+  ELEVENLABS_AGENT_ID: z.string().optional(),
+
+  // ── WhatsApp Cloud API ────────────────────────────────────────────────────
+  // Platform-level Meta App credentials (set once by platform admin)
+  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
+  WHATSAPP_APP_ID: z.string().optional(),
+  WHATSAPP_APP_SECRET: z.string().optional(),
+  // Embedded Signup configuration ID (from Meta App → Embedded Signup settings)
+  WHATSAPP_CONFIG_ID: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

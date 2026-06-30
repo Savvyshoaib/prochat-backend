@@ -26,6 +26,8 @@ export const createBotSchema = z.object({
   knowledgeFiles: z
     .array(z.object({ name: z.string(), size: z.string() }))
     .default([]),
+  waPhoneNumberId: z.string().default(""),
+  waAccessToken: z.string().default(""),
 });
 
 export const updateBotSchema = createBotSchema.partial();

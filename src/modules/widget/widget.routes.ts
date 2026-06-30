@@ -6,6 +6,7 @@ import { bots } from "@/db/schema";
 import { conversations, messages } from "@/db/schema/conversations";
 import { fail } from "@/utils/response";
 import { streamAI, buildSystemPrompt } from "@/modules/chat/chat.routes";
+import { notifyOwnerViaWhatsApp } from "@/modules/whatsapp/session-manager";
 import { env } from "@/config/env";
 
 // The embeddable widget script — all logic here, snippet is just 2 lines on the user's site.
@@ -176,6 +177,11 @@ export async function widgetRoutes(app: FastifyInstance) {
       }
       res.write(`data: ${JSON.stringify({ done: true, conversationId: convId_final })}\n\n`);
       res.end();
+
+      // Forward to bot owner's WhatsApp if connected (fire-and-forget)
+      if (fullReply) {
+        notifyOwnerViaWhatsApp(botId, message, fullReply).catch(() => {});
+      }
     }
   });
 }
